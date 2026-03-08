@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const crypto = require('crypto');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -5,9 +7,7 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI =
-  process.env.MONGODB_URI ||
-  'mongodb+srv://diogoduarte2000:klonoa2026@cluster0.h7kvt84.mongodb.net/tarefasDB?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI || '';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'change-this-secret-in-production';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 const CHALLENGE_TTL_SECONDS = 10 * 60;
@@ -20,6 +20,10 @@ const OTP_EMAIL_FROM = process.env.OTP_EMAIL_FROM || '';
 
 app.use(cors());
 app.use(express.json());
+
+if (!MONGODB_URI) {
+  throw new Error('MONGODB_URI nao definido. Configura tarefas-backend/.env antes de iniciar o servidor.');
+}
 
 mongoose
   .connect(MONGODB_URI)
