@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import './App.css';
 
-const API_URL = 'http://localhost:5000';
+const DEFAULT_API_URL = 'http://127.0.0.1:5000';
+const API_URL = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/$/, '');
 const TOKEN_KEY = 'tarefas_auth_token';
+const SHOW_DEV_OTP = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEV_OTP === 'true';
 
 type AuthMode = 'login' | 'register';
 type AuthStage = 'auth' | 'otp' | 'recovery-request' | 'recovery-reset';
@@ -38,6 +40,30 @@ interface AuthFormState {
   username: string;
   email: string;
   password: string;
+}
+
+function isLocalApiUrl(url: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url);
+}
+
+function isHostedFrontendWithoutPublishedApi() {
+  return (
+    typeof window !== 'undefined' &&
+    window.location.hostname.endsWith('github.io') &&
+    isLocalApiUrl(API_URL)
+  );
+}
+
+function getRequestErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof TypeError && isHostedFrontendWithoutPublishedApi()) {
+    return 'O frontend esta publicado, mas a API ainda aponta para localhost. Publica o backend e define VITE_API_URL antes do deploy.';
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 async function apiRequest<T>(
@@ -152,7 +178,7 @@ function App() {
       } catch (error) {
         if (cancelled) return;
         handleLogout();
-        setAuthError(error instanceof Error ? error.message : 'Sessao invalida');
+        setAuthError(getRequestErrorMessage(error, 'Sessao invalida'));
       } finally {
         if (!cancelled) {
           setTasksLoading(false);
@@ -237,7 +263,7 @@ function App() {
       setOtpCode('');
       setAuthStage('otp');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Erro na autenticacao');
+      setAuthError(getRequestErrorMessage(error, 'Erro na autenticacao'));
     } finally {
       setAuthLoading(false);
     }
@@ -267,7 +293,7 @@ function App() {
         password: '',
       });
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Erro ao validar codigo');
+      setAuthError(getRequestErrorMessage(error, 'Erro ao validar codigo'));
     } finally {
       setOtpLoading(false);
     }
@@ -292,7 +318,7 @@ function App() {
       setOtpCode('');
       setAuthInfo('Novo codigo enviado para o teu email.');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Erro ao reenviar codigo');
+      setAuthError(getRequestErrorMessage(error, 'Erro ao reenviar codigo'));
     } finally {
       setResendLoading(false);
     }
@@ -316,7 +342,7 @@ function App() {
       setAuthStage('recovery-reset');
       setAuthInfo('Enviamos um codigo para recuperares a password.');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Erro ao iniciar recuperacao');
+      setAuthError(getRequestErrorMessage(error, 'Erro ao iniciar recuperacao'));
     } finally {
       setRecoveryLoading(false);
     }
@@ -348,7 +374,7 @@ function App() {
       setAuthForm((current) => ({ ...current, password: '', email: recoveryEmail }));
       setAuthInfo('Password atualizada. Agora podes iniciar sessao.');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Erro ao redefinir a password');
+      setAuthError(getRequestErrorMessage(error, 'Erro ao redefinir a password'));
     } finally {
       setRecoveryLoading(false);
     }
@@ -373,7 +399,7 @@ function App() {
       setNovaTarefa('');
       setTaskError('');
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'Erro ao criar tarefa');
+      setTaskError(getRequestErrorMessage(error, 'Erro ao criar tarefa'));
     }
   }
 
@@ -391,7 +417,7 @@ function App() {
         current.map((task) => (task._id === taskId ? updatedTask : task))
       );
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'Erro ao atualizar tarefa');
+      setTaskError(getRequestErrorMessage(error, 'Erro ao atualizar tarefa'));
     }
   }
 
@@ -407,7 +433,7 @@ function App() {
 
       setTarefas((current) => current.filter((task) => task._id !== taskId));
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'Erro ao apagar tarefa');
+      setTaskError(getRequestErrorMessage(error, 'Erro ao apagar tarefa'));
     }
   }
 
@@ -431,7 +457,7 @@ function App() {
       );
       handleLogout();
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'Erro ao remover conta');
+      setTaskError(getRequestErrorMessage(error, 'Erro ao remover conta'));
     } finally {
       setAccountLoading(false);
     }
@@ -463,13 +489,14 @@ function App() {
       setEditingTexto('');
       setTaskError('');
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'Erro ao editar tarefa');
+      setTaskError(getRequestErrorMessage(error, 'Erro ao editar tarefa'));
     }
   }
 
   const isAuthenticated = Boolean(user && token);
   const completedCount = tarefas.filter((task) => task.concluida).length;
   const displayName = getDisplayName(user);
+  const showHostedApiNotice = !isAuthenticated && isHostedFrontendWithoutPublishedApi();
 
   function renderAuthCard() {
     if (authStage === 'otp' && pendingChallenge) {
@@ -491,7 +518,7 @@ function App() {
             />
           </label>
 
-          {pendingChallenge.devCode ? (
+          {SHOW_DEV_OTP && pendingChallenge.devCode ? (
             <p className="feedback feedback--info">
               Modo dev: codigo atual {pendingChallenge.devCode}
             </p>
@@ -585,7 +612,7 @@ function App() {
             />
           </label>
 
-          {pendingChallenge.devCode ? (
+          {SHOW_DEV_OTP && pendingChallenge.devCode ? (
             <p className="feedback feedback--info">
               Modo dev: codigo atual {pendingChallenge.devCode}
             </p>
@@ -885,6 +912,12 @@ function App() {
                       ? `Usa o codigo enviado para ${pendingChallenge?.maskedDestination || 'o teu email'} e escolhe uma nova password.`
                       : 'Cada utilizador passa a ter a propria area de tarefas com criacao, edicao, conclusao e remocao.'}
               </p>
+              {showHostedApiNotice ? (
+                <p className="feedback feedback--warning">
+                  O frontend no GitHub Pages esta visivel, mas a API ainda usa <strong>localhost</strong>.
+                  Publica o backend noutro servico e define <code>VITE_API_URL</code> antes do deploy.
+                </p>
+              ) : null}
               <div className="hero-notes">
                 <div className="hero-note">
                   <strong>Seguranca por email</strong>
